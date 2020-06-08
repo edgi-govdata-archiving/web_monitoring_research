@@ -4,10 +4,7 @@ import numpy
 import nltk
 from nltk.corpus import stopwords
 from nltk.collocations import *
-#from web_monitoring.differs import _get_visible_text as gvt # import Dan Allan's page content decoder
-from web_monitoring import db
 from web_monitoring import internetarchive
-from web_monitoring import differs
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
@@ -18,8 +15,6 @@ import fnmatch
 default_stopwords = set(nltk.corpus.stopwords.words('english'))
 all_stopwords = default_stopwords
 
-keywords = {}
-final_urls={}
 
 #ancillary count functions
 def count(term, visible_text): # this function counts single word terms from the decoded HTML
@@ -45,28 +40,6 @@ def two_count (term, visible_text): #this function counts phrases from the decod
 		tally += fdist[term[0].lower(), term[1].lower()] #change for specific terms
 	#print(term, tally)    
 	return tally
-
-def keyword_function(visible_text):
-    #based on https://www.strehle.de/tim/weblog/archives/2015/09/03/1569
-    keydump=[]
-    #visible_text = gvt(content)
-    new_string = "".join(visible_text)
-    words = nltk.word_tokenize(new_string)
-    # Remove single-character tokens (mostly punctuation)
-    words = [word for word in words if len(word) > 1]
-    # Remove numbers
-    words = [word for word in words if not word.isnumeric()]    
-    # Lowercase all words (default_stopwords are lowercase too)
-    words = [word.lower() for word in words]
-    # Remove stopwords
-    words = [word for word in words if word not in all_stopwords]
-    # Calculate frequency distribution
-    fdist = nltk.FreqDist(words)
-    # Output top 50 words
-    for word, frequency in fdist.most_common(3):
-        keydump.append(word)
-    #print(keydump)
-    return keydump
             
 def counter(file, terms, dates):
     #counts a set of one or two word terms during a single timeframe
@@ -81,21 +54,24 @@ def counter(file, terms, dates):
     #terms=['adaptation', ['Agency', 'Mission'], ['air', 'quality'], 'anthropogenic', 'benefits', 'Brownfield', ['clean', 'energy'], 'Climate', ['climate', 'change'], 'Compliance', 'Cost-effective', 'Costs', 'Deregulatory', 'deregulation', 'droughts', ['economic', 'certainty'], ['economic', 'impacts'], 'economic', 'Efficiency', 'Emissions', ['endangered', 'species'], ['energy', 'independence'], 'Enforcement', ['environmental', 'justice'], ['federal', 'customer'], ['fossil', 'fuels'], 'Fracking', ['global', 'warming'], 'glyphosate', ['greenhouse', 'gases'], ['horizontal', 'drilling'], ['hydraulic', 'fracturing'], 'Impacts', 'Innovation', 'Jobs', 'Mercury', 'Methane', 'pesticides', 'pollution', 'Precautionary', ['regulatory', 'certainty'], 'regulation', 'Resilience', 'Risk', 'Safe', 'Safety', ['sensible', 'regulations'], 'state', 'storms', 'sustainability', 'Toxic', 'transparency', ['Unconventional', 'gas'], ['unconventional', 'oil'], ['Water', 'quality'], 'wildfires']
     #counter("EDGI/inputs/all Versionista URLs 10-16-18.csv", terms, [2016, 1,1,2016,7,1]) #[2018,1,1,2018,7,1]
     
-    row_count = len(data)
-    column_count = 2 #len(terms) 
-    matrix = numpy.zeros((row_count, column_count),dtype=numpy.int16) 
-    print(row_count, column_count)
+    final_urls={}
     
-    for pos, row in enumerate(data):
+    row_count = len(data)
+    column_count = len(terms) 
+    matrix = numpy.full((row_count,column_count), 999, dtype=numpy.int16) #default is 999 until counted otherwise
+    print(row_count, column_count) 
+    
+    for pos, row in enumerate(data[10:100]):
           thisPage = row[0] #change for specific CSVs
+          final_urls[thisPage]=""
           try:
-              with internetarchive.WaybackClient() as client:
+              with internetarchive.WaybackClient() as client: #https://energy.gov/eere/geothermal/articles/third-round-sbv-pilot-open-requests
                    dump = client.list_versions(thisPage, from_date=datetime(dates[0], dates[1],dates[2]), to_date=datetime(dates[3], dates[4], dates[5])) # list_versions calls the CDX API from internetarchive.py from the webmonitoring repo
                    versions = reversed(list(dump))
-                   for version in versions: # for each version in all the snapshots
-                       if version.status_code == '200' or version.status_code == '-': # if the IA snapshot was viable
+                   for version in versions: # For each version in all the snapshots
+                       if version.status_code == '200' or version.status_code == '-': # If the IA snapshot was viable...
                           url=version.raw_url
-                          contents = requests.get(url).content.decode() #decode the url's HTML
+                          contents = requests.get(url, timeout=120).content.decode() # Decode the url's HTML # Handle the request so that it doesn't hang
                           contents = BeautifulSoup(contents, 'lxml')
                           body=contents.find('body')
                           d=[s.extract() for s in body('footer')]
@@ -111,20 +87,18 @@ def counter(file, terms, dates):
                           del d
                           body=[text for text in body.stripped_strings]
                           for p, t in enumerate(terms):
-                                if type(t) is list:
-                                    page_sum = two_count(t, body)
-                                else:
-                                    page_sum = count(t, body)
-                                matrix[pos][p]=page_sum #put the count of the term in the matrix
-                          keywords[url] = keyword_function(body)
-                          final_urls[thisPage]=url#[url, row[3]]
+                              if type(t) is list:
+                                  page_sum = two_count(t, body)
+                              else:
+                                  page_sum = count(t, body)
+                              matrix[pos][p]=page_sum #put the count of the term in the matrix
+                          final_urls[thisPage]=url
                           print(pos)
                           break
                        else:
                           pass
           except:
-              print("fail")
-              #print("No snapshot or can't decode", thisPage)
+              print("No snapshot or can't decode", thisPage)
               final_urls[thisPage]=""
               matrix[pos]=999
          
@@ -143,19 +117,9 @@ def counter(file, terms, dates):
     #print out urls in separate file
     with open('urls.csv','w') as output:
         writer=csv.writer(output)
-        for item in final:#final_urls.items():
-            writer.writerow([item['url'], item['terms']])
+        for item in final_urls.items():
+            writer.writerow([item[0], item[1]])
     output.close()
-
-    #print out keywords in separate file
-    with open("keywords.csv", "w", encoding='utf-8') as outfile:
-        writer = csv.writer(outfile)
-        for key, value in keywords.items():
-            try:
-                writer.writerow([key, value[0], value[1], value[2]])
-            except IndexError:
-                writer.writerow([key, "ERROR"])
-    outfile.close()
 
     print("The program is finished!")
     
@@ -192,112 +156,98 @@ def counter(file, terms, dates):
 #          writer.writerow(x)
 # =============================================================================
 
-def matrix(): 
-    #Alternative to linker that directly prepares output for Gephi network visualization 
+### MATRIX
+#Prepares output for Gephi network visualization 
 
-	#2016 - End of Term
-	#none = 0 
-	connection = 1
-	decoding_error = 8
+with open(file) as csvfile: 
+    read = csv.reader(csvfile)
+    data =  {rows[0]:[rows[1],rows[2]] for rows in read}
+csvfile.close()
 
-	#S19 #Comment these otu to run 2016
-	#none = 0 
-	connection = 3
-	decoding_error = 14
+l=list(data.keys()) #master list of urls (from Wayback Machine scraping)
 
-	# 0 - no connections either timeframe
-	# 1 - connection in obama, removed in Trump
-	# 3 - connection in trump, not in obama
-	# 4 - connections in both
-	# 8 - error in obama, no connection trump
-	# 11 - error in obama, connection in trump
-	# 14 - no connection obama, error trump
-	# 15 - connection obama, error trump
-	# 22 = error boths
+#2016 - End of Term
+#none = 0 
+connection = 1
+decoding_error = 8
 
-	l=[] #master indexed list of urls (from Wayback Machine scraping)
-	l_full=list(shared_final.keys()) # ???
+#S19 #Comment these out to run 2016
+#none = 0 
+connection = 3
+decoding_error = 14
 
-	matrixS19 = numpy.zeros((len(l), len(l)),dtype=numpy.int8)
+# 0 - no connections either timeframe
+# 1 - connection in obama, removed in Trump
+# 3 - connection in trump, not in obama
+# 4 - connections in both
+# 8 - error in obama, no connection trump
+# 11 - error in obama, connection in trump
+# 14 - no connection obama, error trump
+# 15 - connection obama, error trump
+# 22 = error boths	
 
-	#go through
-	for pos,url in enumerate(l):
-	    #print(url[19:])
-	    #print(shared_final[url])
-	    #parse url
-	    thisPage = "https://www.epa.gov"+url #WMurls_linker_August2019.csv???
-	    wmurl=shared_final[thisPage][1] #2016-EOT = [0], [1] = summer19
-	    try:
-	        contents = requests.get(wmurl).content.decode() #decode the url's HTML
-	        contents = BeautifulSoup(contents, 'lxml')
-	        d=[s.extract() for s in contents('script')]
-	        d=[s.extract() for s in contents('style')]
-	        del d
-	        contents=contents.find("body")
-	        links = contents.find_all('a') #find all outgoing links
-	        for link in links:
-	            try:
-	                index = l.index(link['href'])
-	                matrixS19[pos][index] = connection
-	            except ValueError: #link not in our list l
-	                index = -1
-	            except KeyError: #no href in the link
-	                pass
-	        print(pos)
-	    except:
-	        print("decoding error")
-	        matrixS19[pos] = decoding_error # code for indicating decoding error
+matrix_a = numpy.zeros((len(l), len(l)),dtype=numpy.int8) #indicate matrix_a or matrix_b in order to compare
 
-	diffmatrix = matrix + matrixS19
+
+for pos,url in enumerate(l[30:50]):
+    wmurl=data[url][0] #2016-EOT = [0], [1] = summer19
+    try:
+        contents = requests.get(wmurl).content.decode() #decode the url's HTML
+        contents = BeautifulSoup(contents, 'lxml')
+        d=[s.extract() for s in contents('script')]
+        d=[s.extract() for s in contents('style')]
+        del d
+        contents=contents.find("body")
+        links = contents.find_all('a') #find all outgoing links
+        for link in links:
+            try:
+                index = l.index(link['href'])
+                matrix[pos][index] = connection
+            except ValueError: #link not in our list l
+                index = -1
+            except KeyError: #no href in the link
+                pass
+        print(pos)   
+    except:
+        print("decoding error")
+        matrix[pos] = decoding_error # code for indicating decoding error
+
+diffmatrix = matrix_a + matrix_b
 	    
-	#find frequently linked to and linking urls
-	frequently_linkedto_S19=[] #S19 or EOT 
-	col = 0
-	while col < len(l_full):
-	    #print(numpy.mean(matrix[:,col]))
-	    if numpy.mean(matrixS19[:,col]) > 3: # matrix
-	        frequently_linkedto_S19.append(l_full[col])
-	    col+=1   
 	    
-	frequently_linking_S19=[] #S19 or EOT
-	row = 0
-	while row < len(l_full):
-	    #print(numpy.mean(matrix[:,col]))
-	    if numpy.mean(matrixS19[row,:]) > .05 and numpy.mean(matrixS19[row,:]) < 14: # matrixS19
-	        frequently_linking_S19.append(l_full[row])
-	    row+=1  
-
-	#find connections existing in Obama era, but that were removed    
-	results = numpy.where(diffmatrix[:,537] == 1)
-	listOfCoordinates= list(zip(results[0], results[1]))
-	removedConnections = []
-	for coord in listOfCoordinates:
-	    cs = list(coord)
-	    fr = l_full[cs[0]]
-	    to = l_full[cs[1]]          
-	    removedConnections.append([fr, to])
-	    
-	#construct the network graph (for gephi)
-	#form: 
-	# urlA urlA self
-	# urlA urlB both
+#construct the network graph (for gephi)
+#form: 
+# urlA urlA self
+# urlA urlB both
 	# urlA urlC removed
 	# urlB urlA both
 	# urlB urlB self
 	# urlB urlC both
 	# in this example, uralA does not link to C in 2019
-	fullresults=[]
-	results_lost = numpy.where(diffmatrix == 1)
-	results_added = numpy.where(diffmatrix == 3)
-	results_both = numpy.where(diffmatrix == 4)      
-	listOfCoordinates= list(zip(results_both[0], results_both[1]))
-	for coord in listOfCoordinates:
-	    cs = list(coord)
-	    fr = l_full[cs[0]]
-	    to = l_full[cs[1]] 
-	    typ = "both"         
-	    fullresults.append([fr, to, typ])
+
+fullresults=[]
+
+results_lost = numpy.where(diffmatrix == 1)
+results_added = numpy.where(diffmatrix == 3)
+results_both = numpy.where(diffmatrix == 4)  
+
+listOfCoordinates= list(zip(results_added[0], results_added[1])) #do this separately for results_lost, added, AND both
+for coord in listOfCoordinates:
+    cs = list(coord)
+    fr = l[cs[0]]
+    to = l[cs[1]]
+    typ = "add" 
+    fullresults.append([fr, to, typ])
+    
 	#find the pages not represented i.e. with columns 8/0 and rows 8/0 ????
 	# just add all pages to end of full results?
-	for url in l_full:
-	    fullresults.append([url,"",""])
+	#for url in l_full:
+	    #fullresults.append([url,"",""])
+
+#Save as CSV. You will need to convert delimited text to columns 
+
+with open('links.csv', 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile, delimiter=' ', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+    for row in fullresults:
+        writer.writerow(row)
+csvfile.close()
