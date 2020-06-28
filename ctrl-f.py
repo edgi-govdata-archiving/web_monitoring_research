@@ -4,8 +4,7 @@ import numpy
 import nltk
 from nltk.corpus import stopwords
 from nltk.collocations import *
-from web_monitoring import internetarchive # Using this branch: https://github.com/edgi-govdata-archiving/web-monitoring-processing/tree/86-import-known-db-pages-from-ia
-# This can also be run with slight modifications using the newer `wayback` module: https://wayback.readthedocs.io/en/stable/usage.html
+from web_monitoring import internetarchive # from this branch: https://github.com/edgi-govdata-archiving/web-monitoring-processing/tree/86-import-known-db-pages-from-ia
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
@@ -49,7 +48,7 @@ def two_count (term, visible_text): #this function counts phrases from the decod
 
 file= "EDGI/in/counts_input_urls.csv"
 terms=['adaptation', ['Agency', 'Mission'], ['air', 'quality'], 'anthropogenic', 'benefits', 'Brownfield', ['clean', 'energy'], 'Climate', ['climate', 'change'], 'Compliance', 'Cost-effective', 'Costs', 'Deregulatory', 'deregulation', 'droughts', ['economic', 'certainty'], ['economic', 'impacts'], 'economic', 'Efficiency', 'Emissions', ['endangered', 'species'], ['energy', 'independence'], 'Enforcement', ['environmental', 'justice'], ['federal', 'customer'], ['fossil', 'fuels'], 'Fracking', ['global', 'warming'], 'glyphosate', ['greenhouse', 'gases'], ['horizontal', 'drilling'], ['hydraulic', 'fracturing'], 'Impacts', 'Innovation', 'Jobs', 'Mercury', 'Methane', 'pesticides', 'pollution', 'Precautionary', ['regulatory', 'certainty'], 'regulation', 'Resilience', 'Risk', 'Safe', 'Safety', ['sensible', 'regulations'], 'state', 'storms', 'sustainability', 'Toxic', 'transparency', ['Unconventional', 'gas'], ['unconventional', 'oil'], ['Water', 'quality'], 'wildfires']
-dates=[2019, 1,1,2019,7,1] #[2018,1,1,2018,7,1]
+dates=[2019, 1,1,2019,7,1] #[2016,1,1,2016,7,1]
 
 with open(file) as csvfile: 
     read = csv.reader(csvfile)
@@ -63,7 +62,7 @@ column_count = len(terms)
 matrix = numpy.full((row_count,column_count), 999, dtype=numpy.int16) #default is 999 until counted otherwise
 print(row_count, column_count) 
 
-for pos, row in enumerate(data[0:150]):
+for pos, row in enumerate(data):
       thisPage = row[0] #change for specific CSVs
       final_urls[thisPage]=""
       time.sleep(5) # Slow down...
