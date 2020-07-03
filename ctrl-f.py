@@ -17,14 +17,14 @@ import fnmatch
 default_stopwords = set(nltk.corpus.stopwords.words('english'))
 all_stopwords = default_stopwords
 
-def count(term, visible_text): # this function counts single word terms from the decoded HTML
-    term = term.lower()  # normalize so as to make result case insensitive
+def count(term, visible_text): # This function counts single word terms from the decoded HTML
+    term = term.lower()  # Normalize so as to make result case insensitive
     tally = 0
     for section in visible_text:
-    	##bigram here. instead of section.split, bigram the section
+    	# Bigram here. instead of section.split, bigram the section
         for token in section.split():
-            token = re.sub(r'[^\w\s]','',token)#remove punctuation
-            tally += int(term == token.lower()) # instead of in do ==
+            token = re.sub(r'[^\w\s]','',token)# Remove punctuation
+            tally += int(term == token.lower())
     #print(term, tally)
     return tally
 
@@ -33,11 +33,11 @@ def two_count (term, visible_text): #this function counts phrases from the decod
 	length = len(term)
 	for section in visible_text:
 		tokens = nltk.word_tokenize(section)
-		tokens = [x.lower() for x in tokens] #standardize to lowercase
+		tokens = [x.lower() for x in tokens] # Standardize to lowercase
 		tokens = [re.sub(r'[^\w\s]','',x) for x in tokens]
 		grams=nltk.ngrams(tokens,length)
 		fdist = nltk.FreqDist(grams)
-		tally += fdist[term[0].lower(), term[1].lower()] #change for specific terms
+		tally += fdist[term[0].lower(), term[1].lower()]
 	#print(term, tally)    
 	return tally
             
@@ -48,7 +48,7 @@ def two_count (term, visible_text): #this function counts phrases from the decod
 
 file= "EDGI/in/counts_input_urls.csv"
 terms=['adaptation', ['Agency', 'Mission'], ['air', 'quality'], 'anthropogenic', 'benefits', 'Brownfield', ['clean', 'energy'], 'Climate', ['climate', 'change'], 'Compliance', 'Cost-effective', 'Costs', 'Deregulatory', 'deregulation', 'droughts', ['economic', 'certainty'], ['economic', 'impacts'], 'economic', 'Efficiency', 'Emissions', ['endangered', 'species'], ['energy', 'independence'], 'Enforcement', ['environmental', 'justice'], ['federal', 'customer'], ['fossil', 'fuels'], 'Fracking', ['global', 'warming'], 'glyphosate', ['greenhouse', 'gases'], ['horizontal', 'drilling'], ['hydraulic', 'fracturing'], 'Impacts', 'Innovation', 'Jobs', 'Mercury', 'Methane', 'pesticides', 'pollution', 'Precautionary', ['regulatory', 'certainty'], 'regulation', 'Resilience', 'Risk', 'Safe', 'Safety', ['sensible', 'regulations'], 'state', 'storms', 'sustainability', 'Toxic', 'transparency', ['Unconventional', 'gas'], ['unconventional', 'oil'], ['Water', 'quality'], 'wildfires']
-dates=[2016, 1,1,2016,7,1] #[2018,1,1,2018,7,1]
+dates=[2019, 1,1,2019,7,1] #[2016,1,1,2016,7,1]
 
 with open(file) as csvfile: 
     read = csv.reader(csvfile)
@@ -61,7 +61,6 @@ row_count = len(data)
 column_count = len(terms) 
 matrix = numpy.full((row_count,column_count), 999, dtype=numpy.int16) #default is 999 until counted otherwise
 print(row_count, column_count) 
-
 
 for pos, row in enumerate(data):
       thisPage = row[0] #change for specific CSVs
@@ -94,16 +93,20 @@ for pos, row in enumerate(data):
                               page_sum = two_count(t, body)
                           else:
                               page_sum = count(t, body)
-                          matrix[pos][p]=page_sum #put the count of the term in the matrix
+                          matrix[pos][p]=page_sum # Put the count of the term in the matrix
                       final_urls[thisPage]=url
                       print(version.status_code, pos, url)
                       break
-                   else:
-                      pass
+                 else:
+                     # Confirm the data is NA
+                     print("No snapshot or can't decode", thisPage)
+                     final_urls[thisPage]=""
+                     matrix[pos]=999
       except:
+          # Confirm the data is NA
           print("No snapshot or can't decode", thisPage)
           final_urls[thisPage]=""
-          matrix[pos]=999
+          matrix[pos]=999 
      
 unique, counts = numpy.unique(matrix, return_counts=True)
 results = dict(zip(unique, counts))
@@ -123,39 +126,6 @@ with open('urls.csv','w') as output:
     for item in final_urls.items():
         writer.writerow([item[0], item[1]])
 output.close()
-
-# =============================================================================
-    # correct processing errors
-#  file="EDGI/outputs/dump/count_processedTZ.csv"
-#  
-#  with open(file)as csvfile:
-#      read=csv.reader(csvfile)
-#      newcounts=list(read)
-#  
-#  file="EDGI/outputs/main/term count trump1-7/trump_count_WMcorrected.csv"
-#  
-#  with open(file)as csvfile:
-#      read=csv.reader(csvfile)
-#      t=list(read)
-# 
-# 
-# for r in t:
-#     url=r[0]
-#     if len(r[2])==0:
-#         for row in newcounts:
-#             if row[0]==url:
-#                 r[2:59]=row[1:58]
-#           
-#  for rr in t:
-#      if len(rr[2])==0:
-#          rr[2] = "NA"    
-# 
-# 
-#  with open('EDGI/outputs/dump/count_outputFINALTZ.csv', 'w', newline='') as csvfile:
-#      writer = csv.writer(csvfile, delimiter=' ')
-#      for x in t:
-#          writer.writerow(x)
-# =============================================================================
 
 # MATRIX
 # Prepares output for Gephi network visualization 
