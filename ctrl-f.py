@@ -4,7 +4,8 @@ import numpy
 import nltk
 from nltk.corpus import stopwords
 from nltk.collocations import *
-from web_monitoring import internetarchive # from this branch: https://github.com/edgi-govdata-archiving/web-monitoring-processing/tree/86-import-known-db-pages-from-ia
+from web_monitoring import internetarchive # Using this branch: https://github.com/edgi-govdata-archiving/web-monitoring-processing/tree/86-import-known-db-pages-from-ia
+# This can also be run with slight modifications using the newer `wayback` module: https://wayback.readthedocs.io/en/stable/usage.html
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
@@ -48,7 +49,7 @@ def two_count (term, visible_text): #this function counts phrases from the decod
 
 file= "EDGI/in/counts_input_urls.csv"
 terms=['adaptation', ['Agency', 'Mission'], ['air', 'quality'], 'anthropogenic', 'benefits', 'Brownfield', ['clean', 'energy'], 'Climate', ['climate', 'change'], 'Compliance', 'Cost-effective', 'Costs', 'Deregulatory', 'deregulation', 'droughts', ['economic', 'certainty'], ['economic', 'impacts'], 'economic', 'Efficiency', 'Emissions', ['endangered', 'species'], ['energy', 'independence'], 'Enforcement', ['environmental', 'justice'], ['federal', 'customer'], ['fossil', 'fuels'], 'Fracking', ['global', 'warming'], 'glyphosate', ['greenhouse', 'gases'], ['horizontal', 'drilling'], ['hydraulic', 'fracturing'], 'Impacts', 'Innovation', 'Jobs', 'Mercury', 'Methane', 'pesticides', 'pollution', 'Precautionary', ['regulatory', 'certainty'], 'regulation', 'Resilience', 'Risk', 'Safe', 'Safety', ['sensible', 'regulations'], 'state', 'storms', 'sustainability', 'Toxic', 'transparency', ['Unconventional', 'gas'], ['unconventional', 'oil'], ['Water', 'quality'], 'wildfires']
-dates=[2019, 1,1,2019,7,1] #[2016,1,1,2016,7,1]
+dates=[2020, 1,1,2020,7,1] #[2018,1,1,2018,7,1]
 
 with open(file) as csvfile: 
     read = csv.reader(csvfile)
@@ -97,11 +98,11 @@ for pos, row in enumerate(data):
                       final_urls[thisPage]=url
                       print(version.status_code, pos, url)
                       break
-                 else:
-                     # Confirm the data is NA
-                     print("No snapshot or can't decode", thisPage)
-                     final_urls[thisPage]=""
-                     matrix[pos]=999
+               else:
+                   # Confirm the data is NA
+                   print("No snapshot or can't decode", thisPage)
+                   final_urls[thisPage]=""
+                   matrix[pos]=999
       except:
           # Confirm the data is NA
           print("No snapshot or can't decode", thisPage)
@@ -114,14 +115,14 @@ print (results)
 
 # For writing term count to a csv. you will need to convert delimited text to columns and replace the first column with the list of URLs
 
-with open('counts.csv', 'w', newline='') as csvfile:
+with open('counts2020.csv', 'w', newline='') as csvfile:
     writer = csv.writer(csvfile, delimiter=' ', quotechar='|', quoting=csv.QUOTE_MINIMAL)
     for row in matrix:
         writer.writerow(row)
 csvfile.close()
 
 #print out urls in separate file
-with open('urls.csv','w') as output:
+with open('urls2020.csv','w') as output:
     writer=csv.writer(output)
     for item in final_urls.items():
         writer.writerow([item[0], item[1]])
@@ -142,11 +143,12 @@ l=list(data.keys()) #master list of urls (from Wayback Machine scraping)
 connection = 1
 decoding_error = 8
 
-# S19 # Comment these out to run 2016
+# S20 # Comment these out to run 2016
 #none = 0 
 connection = 3
 decoding_error = 14
 
+# For reference
 # 0 - no connections either timeframe
 # 1 - connection in obama, removed in Trump
 # 3 - connection in trump, not in obama
@@ -157,11 +159,12 @@ decoding_error = 14
 # 15 - connection obama, error trump
 # 22 = error boths	
 
-matrix_a = numpy.zeros((len(l), len(l)),dtype=numpy.int8) #indicate matrix_a or matrix_b in order to compare
+matrix_b = numpy.zeros((len(l), len(l)),dtype=numpy.int8) # indicate matrix_a or matrix_b in order to compare
 
 
-for pos,url in enumerate(l[30:50]):
-    wmurl=data[url][0] #2016-EOT = [0], [1] = summer19
+for pos,url in enumerate(l):
+    wmurl=data[url][1] #2016-EOT = [0], [1] = summer20
+    time.sleep(5) # Slow down...
     try:
         contents = requests.get(wmurl).content.decode() #decode the url's HTML
         contents = BeautifulSoup(contents, 'lxml')
@@ -173,7 +176,7 @@ for pos,url in enumerate(l[30:50]):
         for link in links:
             try:
                 index = l.index(link['href'])
-                matrix[pos][index] = connection
+                matrix_b[pos][index] = connection
             except ValueError: #link not in our list l
                 index = -1
             except KeyError: #no href in the link
@@ -181,7 +184,7 @@ for pos,url in enumerate(l[30:50]):
         print(pos)   
     except:
         print("decoding error")
-        matrix[pos] = decoding_error # code for indicating decoding error
+        matrix_b[pos] = decoding_error # code for indicating decoding error
 
 
 # Create a second matrix, matrix_b, before running the below code
@@ -203,17 +206,17 @@ results_lost = numpy.where(diffmatrix == 1)
 results_added = numpy.where(diffmatrix == 3)
 results_both = numpy.where(diffmatrix == 4)  
 
-listOfCoordinates= list(zip(results_added[0], results_added[1])) #do this separately for results_lost, added, AND both
+listOfCoordinates= list(zip(results_both[0], results_both[1])) #do this separately for results_lost, added, AND both
 for coord in listOfCoordinates:
     cs = list(coord)
     fr = l[cs[0]]
     to = l[cs[1]]
-    typ = "add" 
+    typ = "lost" 
     fullresults.append([fr, to, typ])
 
 #Save as CSV. You will need to convert delimited text to columns 
 
-with open('links.csv', 'w', newline='') as csvfile:
+with open('links2020.csv', 'w', newline='') as csvfile:
     writer = csv.writer(csvfile, delimiter=' ', quotechar='|', quoting=csv.QUOTE_MINIMAL)
     for row in fullresults:
         writer.writerow(row)
