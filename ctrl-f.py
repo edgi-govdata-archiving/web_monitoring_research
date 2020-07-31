@@ -49,7 +49,7 @@ def two_count (term, visible_text): #this function counts phrases from the decod
 
 file= "EDGI/in/counts_input_urls.csv"
 terms=['adaptation', ['Agency', 'Mission'], ['air', 'quality'], 'anthropogenic', 'benefits', 'Brownfield', ['clean', 'energy'], 'Climate', ['climate', 'change'], 'Compliance', 'Cost-effective', 'Costs', 'Deregulatory', 'deregulation', 'droughts', ['economic', 'certainty'], ['economic', 'impacts'], 'economic', 'Efficiency', 'Emissions', ['endangered', 'species'], ['energy', 'independence'], 'Enforcement', ['environmental', 'justice'], ['federal', 'customer'], ['fossil', 'fuels'], 'Fracking', ['global', 'warming'], 'glyphosate', ['greenhouse', 'gases'], ['horizontal', 'drilling'], ['hydraulic', 'fracturing'], 'Impacts', 'Innovation', 'Jobs', 'Mercury', 'Methane', 'pesticides', 'pollution', 'Precautionary', ['regulatory', 'certainty'], 'regulation', 'Resilience', 'Risk', 'Safe', 'Safety', ['sensible', 'regulations'], 'state', 'storms', 'sustainability', 'Toxic', 'transparency', ['Unconventional', 'gas'], ['unconventional', 'oil'], ['Water', 'quality'], 'wildfires']
-dates=[2020, 1,1,2020,7,1] #[2018,1,1,2018,7,1]
+dates=[2020, 1,1,2020,7,1] #[2016,1,1,2016,7,1]
 
 with open(file) as csvfile: 
     read = csv.reader(csvfile)
@@ -166,21 +166,39 @@ for pos,url in enumerate(l):
     wmurl=data[url][1] #2016-EOT = [0], [1] = summer20
     time.sleep(5) # Slow down...
     try:
-        contents = requests.get(wmurl).content.decode() #decode the url's HTML
+        contents = requests.get(wmurl).content.decode() # Decode the url's HTML
         contents = BeautifulSoup(contents, 'lxml')
         d=[s.extract() for s in contents('script')]
         d=[s.extract() for s in contents('style')]
         del d
         contents=contents.find("body")
-        links = contents.find_all('a') #find all outgoing links
-        for link in links:
+        links = contents.find_all('a',href=True) # Find all outgoing links
+        hrefs=set(h["href"] for h in links) # Get unique HREFs
+        for link in hrefs:
             try:
-                index = l.index(link['href'])
+                index = l.index([link]) # Normal / match with our list l
                 matrix_b[pos][index] = connection
+                continue
             except ValueError: #link not in our list l
                 index = -1
-            except KeyError: #no href in the link
-                pass
+            try:
+                index = l.index(link.replace("https://www3.epa.gov","")) # www3 links used unlike ours
+                matrix_b[pos][index] = connection
+                continue
+            except ValueError: #link not in our list l
+                index = -1
+            try:
+                index = l.index(link.replace("https://www.epa.gov","")) # full epa.gov links used unlike ours
+                matrix_b[pos][index] = connection
+                continue
+            except ValueError: #link not in our list l
+                index = -1
+            try:
+                index = l.index(link[:-1]) # has an extra / at the end, unlike our list l
+                matrix_b[pos][index] = connection
+                continue
+            except ValueError: #link not in our list l
+                index = -1
         print(pos)   
     except:
         print("decoding error")
@@ -211,13 +229,19 @@ for coord in listOfCoordinates:
     cs = list(coord)
     fr = l[cs[0]]
     to = l[cs[1]]
-    typ = "lost" 
+    typ = "both" # CHANGE FOR EACH RUN
     fullresults.append([fr, to, typ])
 
-#Save as CSV. You will need to convert delimited text to columns 
+# Save as CSV. You will need to convert delimited text to columns 
 
-with open('links2020.csv', 'w', newline='') as csvfile:
+with open('diffmatrix.csv', 'w', newline='') as csvfile:
     writer = csv.writer(csvfile, delimiter=' ', quotechar='|', quoting=csv.QUOTE_MINIMAL)
     for row in fullresults:
         writer.writerow(row)
 csvfile.close()
+
+# To show entire pages - not just connections - that have been removed
+for pos, column in enumerate(diffmatrix.T): # transpose to iterate through columns (as rows)
+    column = numpy.delete(column,numpy.where(column > 4)) # remove values greater than 4 (errors - see above)
+    if numpy.max(column) == 1: # if the max value in the column is 1, it means it was just connected in Obama - connections removed during Trump period (would be 4 if maintained) and no new ones addded (3)
+       print(pos)
